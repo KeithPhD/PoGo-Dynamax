@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sortable JSON Table</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; background-color: #f4f4f9; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #4CAF50; color: white; cursor: pointer; user-select: none; }
+        th:hover { background-color: #45a049; }
+        tr:hover { background-color: #f1f1f1; }
+        /* Simple indicator for sorting */
+        th.sort-asc::after { content: " ▲"; }
+        th.sort-desc::after { content: " ▼"; }
+    </style>
+</head>
+<body>
+<label id="value-display" for="volume">Shields(0):</label>
+<input type="range" id="volume" name="volume" value="0" min="0" max="9" step="1">
+<label class="switch">Only Half-Second Moves: 
+  <input type="checkbox" id="settings-toggle">
+  <span class="slider"></span>
+</label>
+<!-- <p>Value: <span id="value-display">0</span></p> -->
+    <h2>Inventory List</h2>
+    <table id="json-table">
+        <thead>
+            <tr>
+                <th onclick="sortTable('pokemon')">Name</th>
+                <th onclick="sortTable('base_attack')">Attack</th>
+                <th onclick="sortTable('base_defense')">Defense</th>
+                <th onclick="sortTable('base_stamina')">Stamina</th>
+                <th onclick="sortTable('Bug')">Bug</th>
+                <th onclick="sortTable('Dark')">Dark</th>
+                <th onclick="sortTable('Dragon')">Dragon</th>
+                <th onclick="sortTable('Electric')">Electric</th>
+                <th onclick="sortTable('Fairy')">Fairy</th>
+                <th onclick="sortTable('Fighting')">Fighting</th>
+                <th onclick="sortTable('Fire')">Fire</th>
+                <th onclick="sortTable('Flying')">Flying</th>
+                <th onclick="sortTable('Ghost')">Ghost</th>
+                <th onclick="sortTable('Grass')">Grass</th>
+                <th onclick="sortTable('Ground')">Ground</th>
+                <th onclick="sortTable('Ice')">Ice</th>
+                <th onclick="sortTable('Normal')">Normal</th>
+                <th onclick="sortTable('Poison')">Poison</th>
+                <th onclick="sortTable('Psychic')">Psychic</th>
+                <th onclick="sortTable('Rock')">Rock</th>
+                <th onclick="sortTable('Steel')">Steel</th>
+                <th onclick="sortTable('Water')">Water</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            </tbody>
+    </table>
+
+    <script>
+        let statsTable = [];
+        let effectivenessTable = [];
+        let typesTable = [];
+        let dataTable = [];
+        const level50CPM = 0.8403;
+        let shields = 0;
+        let onlyHalfSecondMoves = false;
+
+        let currentSortColumn = '';
+        let isDescending = true;
+        console.log("Script loaded, starting to fetch data...");
+        async function loadTableData() {
+            try {
+                let response = await fetch('https://pogoapi.net/api/v1/pokemon_stats.json');
+                statsTable = await response.json();
+                response = await fetch('https://pogoapi.net/api/v1/pokemon_types.json');
+                typesTable = await response.json();
+                response = await fetch('https://pogoapi.net/api/v1/type_effectiveness.json');
+                effectivenessTable = await response.json();
+                response = await fetch('https://pogoapi.net/api/v1/fast_moves.json');
+                fastMovesTable = await response.json();
+                response = await fetch('https://pogoapi.net/api/v1/current_pokemon_moves.json');
+                currentMovesTable = await response.json();
+                // response = await fetch('https://pogoapi.net/api/v1/pokemon_rarity.json');
+                // rarityTable = await response.json();
+                // console.log(rarityTable['Legendary'])
+                // console.log(rarityTable['Mythic'])
+                // console.log(rarityTable['Ultra beast'])
+                // Introduce legendary level and options
+                
+
+                const fastMoveDict = fastMovesTable.reduce((acc, entry) => {
+                    acc[entry.name] = Math.round(entry.duration / 500);
+                    return acc;
+                }, {});
+                // console.log(currentMovesTable)
+
+                dataTable = statsTable.map((stats, i) => {
+                    let typings = typesTable[i]['type'];
+                    resistance = typings.length == 1 ? 
+                    Object.keys(effectivenessTable).reduce((acc, atkType) => {
+                        acc[atkType] = 1 / effectivenessTable[atkType][typings[0]];
+                        return acc;
+                    }, {}) :
+                    Object.keys(effectivenessTable).reduce((acc, atkType) => {
+                        acc[atkType] = 1 / effectivenessTable[atkType][typings[0]] / effectivenessTable[atkType][typings[1]];
+                        return acc;
+                    }, {});
+                    ['base_attack', 'base_defense', 'base_stamina'].forEach(stat => {
+                        calcStat = (stats[stat] + 15) * level50CPM;
+                        resistance[stat] = stat == 'base_stamina' ? Math.floor(calcStat) : Math.round(calcStat, 4);
+                    })
+                    resistance['pokemon'] = stats['pokemon_name'] + (stats['form'] != 'Normal' ? ` (${stats['form']})` : '');
+
+                    const moveDurations = new Set(
+                        currentMovesTable[i].fast_moves.map(moveName => fastMoveDict[moveName])
+                    );
+
+                    resistance['Fast Moves'] = Array.from(moveDurations);
+
+                    return resistance;
+                });
+
+                renderTable(dataTable.slice(0, 100));
+            } catch (error) {
+                console.error("Error fetching JSON:", error);
+                document.getElementById('table-body').innerHTML = `<tr><td colspan="4">Error loading data.</td></tr>`;
+            }
+        }
+
+        function renderTable(data) {
+            const tableBody = document.getElementById('table-body');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            const blissey_filtered = dataTable.filter((entry) => entry['pokemon'] == 'Blissey')[0]
+            const blissey = Object.entries(blissey_filtered).reduce((acc, [key, value]) => {
+                if (['pokemon', 'base_attack', 'base_defense', 'base_stamina', 'Fast Moves'].includes(key)) {
+                    return acc;
+                }
+                acc[key] = value * blissey_filtered.base_defense * (blissey_filtered.base_stamina + 60 * shields);
+                return acc;
+            }, {});
+
+            // console.log(blissey_filtered)
+            // console.log(blissey)
+            data.forEach(item => {
+                let multiplier = item.base_defense * (item.base_stamina + 60 * shields + (item.pokemon.includes('Crowned_shield') ? 60 : 0));
+                const row = `<tr>
+                    <td>${item.pokemon}</td>
+                    <td>${item.base_attack}</td>
+                    <td>${item.base_defense}</td>
+                    <td>${item.base_stamina}</td>
+                    <td>${(item.Bug * multiplier / blissey.Bug).toFixed(2)}</td>
+                    <td>${(item.Dark * multiplier / blissey.Dark).toFixed(2)}</td>
+                    <td>${(item.Dragon * multiplier / blissey.Dragon).toFixed(2)}</td>
+                    <td>${(item.Electric * multiplier / blissey.Electric).toFixed(2)}</td>
+                    <td>${(item.Fairy * multiplier / blissey.Fairy).toFixed(2)}</td>
+                    <td>${(item.Fighting * multiplier / blissey.Fighting).toFixed(2)}</td>
+                    <td>${(item.Fire * multiplier / blissey.Fire).toFixed(2)}</td>
+                    <td>${(item.Flying * multiplier / blissey.Flying).toFixed(2)}</td>
+                    <td>${(item.Ghost * multiplier / blissey.Ghost).toFixed(2)}</td>
+                    <td>${(item.Grass * multiplier / blissey.Grass).toFixed(2)}</td>
+                    <td>${(item.Ground * multiplier / blissey.Ground).toFixed(2)}</td>
+                    <td>${(item.Ice * multiplier / blissey.Ice).toFixed(2)}</td>
+                    <td>${(item.Normal * multiplier / blissey.Normal).toFixed(2)}</td>
+                    <td>${(item.Poison * multiplier / blissey.Poison).toFixed(2)}</td>
+                    <td>${(item.Psychic * multiplier / blissey.Psychic).toFixed(2)}</td>
+                    <td>${(item.Rock * multiplier / blissey.Rock).toFixed(2)}</td>
+                    <td>${(item.Steel * multiplier / blissey.Steel).toFixed(2)}</td>
+                    <td>${(item.Water * multiplier / blissey.Water).toFixed(2)}</td>
+                </tr>`;
+                tableBody.innerHTML += row;
+            });
+        }
+
+        function sortTable(column, flip=true) {
+            // Toggle direction if clicking the same column
+            if (flip) {
+                if (currentSortColumn === column) {
+                    isDescending = !isDescending;
+                } else {
+                    isDescending = true;
+                    currentSortColumn = column;
+                }
+            }
+            // const uniqueDate = dataTable.filter(entry => !['Lapras'].includes(entry['pokemon']));
+            const uniqueDate = dataTable.filter(entry => !['Costume_2020', 'Eternamax', 'Fall_2019', 'Copy_2019'].some(sub => entry['pokemon'].includes(sub)));
+            const sortedData = [...uniqueDate].sort((a, b) => {
+                let valA = a[column] * a['base_defense'] * (a['base_stamina'] + 60 * shields + (a.pokemon.includes('Crowned_shield') ? 60 : 0));
+                let valB = b[column] * b['base_defense'] * (b['base_stamina'] + 60 * shields + (b.pokemon.includes('Crowned_shield') ? 60 : 0));
+
+                // Handle strings vs numbers
+                if (typeof valA === 'string') {
+                    return isDescending 
+                        ? valA.localeCompare(valB) 
+                        : valB.localeCompare(valA);
+                } else {
+                    return isDescending ? valB - valA : valA - valB;
+                }
+            });
+
+            updateHeaderStyles(column);
+            if (onlyHalfSecondMoves) {
+                renderTable(sortedData.filter((entry) => entry['Fast Moves'].includes(1)).slice(0, 100));
+            } else {
+                renderTable(sortedData.slice(0, 100));
+            }
+        }
+
+        function updateHeaderStyles(column) {
+            const headers = document.querySelectorAll('th');
+            headers.forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (th.getAttribute('onclick').includes(`'${column}'`)) {
+                    th.classList.add(isDescending ? 'sort-desc' : 'sort-asc');
+                }
+            });
+        }
+
+        const slider = document.getElementById('volume');
+        const display = document.getElementById('value-display');
+        slider.addEventListener('input', (event) => {
+            shields = Number(event.target.value);
+            display.textContent = 'Shields(' + shields + ')';
+            sortTable(currentSortColumn, flip=false)
+        });
+
+        const btn = document.getElementById('settings-toggle');
+        btn.addEventListener('click', () => {
+            const isPressed = btn.getAttribute('aria-pressed') === 'true';
+            btn.setAttribute('aria-pressed', !isPressed);
+            onlyHalfSecondMoves = !onlyHalfSecondMoves;
+            sortTable(currentSortColumn, flip=false)
+        });
+
+        loadTableData();
+    </script>
+</body>
+</html>
