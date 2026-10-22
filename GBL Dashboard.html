@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Load JSON from GBL Folder</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 2rem;
+            color: #333;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+        .error {
+            color: #d9534f;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Contents of GBL/test.json</h2>
+    <pre id="output">Loading JSON data...</pre>
+
+    <script>
+        // Path to the JSON file relative to this HTML file 
+        // (Assumes 'GBL' is a folder in the same directory as this HTML file)
+        const jsonPath = 'GBL/test.json';
+
+        async function loadJson() {
+            try {
+                const response = await fetch(jsonPath);
+                
+                // Check if the request was successful
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                // Parse the response text as JSON
+                const jsonData = await response.json();
+
+                // Format the JSON object with 2 spaces of indentation and display it
+                document.getElementById('output').textContent = JSON.stringify(jsonData, null, 2);
+
+            } catch (error) {
+                console.error('Error loading JSON:', error);
+                const outputElement = document.getElementById('output');
+                outputElement.textContent = `Failed to load JSON: ${error.message}`;
+                outputElement.classList.add('error');
+            }
+        }
+
+        // Run the function on page load
+        loadJson();
+    </script>
+
+</body>
+</html>
